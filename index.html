@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>Gachapon Simulator V10 - Backup Edition</title>
+
+    <!-- Librerías Externas -->
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    
+
+    <style>
+
+        body { font-family: 'Inter', system-ui, sans-serif; background-color: #f3f4f6; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        
+
+        /* Animaciones */
+
+        @keyframes shake { 
+
+            0% { transform: rotate(0deg); }
+
+            25% { transform: rotate(-3deg); }
+
+            75% { transform: rotate(3deg); }
+
+            100% { transform: rotate(0deg); }
+
+        }
+
+        .animate-shake { animation: shake 0.3s ease-in-out infinite; }
+
+        
+
+        @keyframes drop {
+
+            0% { transform: translateY(-50px) scale(0.9); opacity: 0; }
+
+            100% { transform: translateY(0) scale(1); opacity: 1; }
+
+        }
+
+        .animate-drop { animation: drop 0.5s cubic-bezier(0.17, 0.67, 0.43, 1.4); }
+
+        @keyframes popIn {
+
+            0% { opacity: 0; transform: scale(0.8); }
+
+            100% { opacity: 1; transform: scale(1); }
+
+        }
+
+        .animate-pop { animation: popIn 0.2s cubic-bezier(0.17, 0.67, 0.43, 1.4); }
+
+        /* Input Color Hack */
+
+        .color-wrapper { position: relative; overflow: hidden; display: inline-block; cursor: pointer; }
+
+        .color-wrapper input[type=color] { position: absolute; left: -50%; top: -50%; width: 200%; height: 200%; cursor: pointer; opacity: 0; }
+
+        
+
+        /* Prevenir selección de texto al dejar picado */
+
+        .prevent-select {
+
+            -webkit-user-select: none;
+
+            -ms-user-select: none;
+
+            user-select: none;
+
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <div id="root"></div>
+
+    <script type="text/babel">
+
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- MANEJO DE ERRORES ---
+
+        class ErrorBoundary extends React.Component {
+
+            constructor(props) {
+
+                super(props);
+
+                this.state = { hasError: false, error: null };
+
+            }
+
+            static getDerivedStateFromError(error) { return { hasError: true, error }; }
+
+            render() {
+
+                if (this.state.hasError) {
+
+                    return (
+
+                        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-gray-100">
+
+                            <h1 className="text-2xl font-bold text-red-500 mb-2">Error de carga</h1>
+
+                            <button onClick={() => { localStorage.clear(); window.location.reload(); }} 
+
+                                className="bg-red-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg">
+
+                                REINICIAR APP
+
+                            </button>
+
+                        </div>
+
+                    );
+
+                }
+
+                return this.props.children;
+
+            }
+
+        }
+
+        // --- ICONOS ---
+
+        const IconBase = ({ children, size=24, className="" }) => (
+
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+
+                {children}
+
+            </svg>
+
+        );
+
+        const Icons = {
+
+            Plus: (props) => <IconBase {...props}><path d="M12 5v14M5 12h14"/></IconBase>,
+
+            Trash: (props) => <IconBase {...props}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></IconBase>,
+
+            Play: (props) => <IconBase {...props} stroke="none" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></IconBase>,
+
+            Back: (props) => <IconBase {...props}><path d="M19 12H5M12 19l-7-7 7-7"/></IconBase>,
+
+            Close: (props) => <IconBase {...props}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></IconBase>,
+
+            Pencil: (props) => <IconBase {...props}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></IconBase>,
+
+            Notes: (props) => <IconBase {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></IconBase>,
+
+            Check: (props) => <IconBase {...props}><polyline points="20 6 9 17 4 12"/></IconBase>,
+
+            Copy: (props) => <IconBase {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></IconBase>,
+
+            Up: (props) => <IconBase {...props}><polyline points="18 15 12 9 6 15"/></IconBase>,
+
+            Down: (props) => <IconBase {...props}><polyline points="6 9 12 15 18 9"/></IconBase>,
+
+            Image: (props) => <IconBase {...props}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></IconBase>,
+
+            Move: (props) => <IconBase {...props}><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="19 9 22 12 19 15"/><polyline points="15 19 12 22 9 19"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></IconBase>,
+
+            Settings: (props) => <IconBase {...props}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></IconBase>,
+
+            Upload: (props) => <IconBase {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></IconBase>,
+
+            Download: (props) => <IconBase {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></IconBase>
+
+        };
+
+        // --- UTILIDADES ---
+
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+
+        
+
+        const resizeImage = (file) => {
+
+            return new Promise((resolve) => {
+
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+
+                    const img = document.createElement('img');
+
+                    img.onload = () => {
+
+                        const canvas = document.createElement('canvas');
+
+                        const ctx = canvas.getContext('2d');
+
+                        const maxSize = 200;
+
+                        let width = img.width;
+
+                        let height = img.height;
+
+                        if (width > height) { if (width > maxSize) { height *= maxSize / width; width = maxSize; } } 
+
+                        else { if (height > maxSize) { width *= maxSize / height; height = maxSize; } }
+
+                        canvas.width = width;
+
+                        canvas.height = height;
+
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        resolve(canvas.toDataURL('image/jpeg', 0.8));
+
+                    };
+
+                    img.src = e.target.result;
+
+                };
+
+                reader.readAsDataURL(file);
+
+            });
+
+        };
+
+        // --- COMPONENTE MAQUINA ---
+
+        const GumballMachine = ({ items = [], color = "#ef4444", size = "md", onClick, className = "", style = {} }) => {
+
+            const sizeClass = { sm: "w-24", md: "w-36", lg: "w-full max-w-[280px]" }[size];
+
+            const randomPositions = useMemo(() => {
+
+                const displayItems = items.slice(0, 15);
+
+                return displayItems.map(item => ({
+
+                    item,
+
+                    left: Math.random() * 60 + 10,
+
+                    bottom: Math.random() * 50 + 5,
+
+                    rotate: Math.random() * 360,
+
+                    zIndex: Math.floor(Math.random() * 10)
+
+                }));
+
+            }, [items]);
+
+            return (
+
+                <div onClick={onClick} style={style} className={`relative flex flex-col items-center select-none ${sizeClass} ${className} cursor-pointer`}>
+
+                    <div className="relative w-full aspect-[4/5] z-10 pointer-events-none">
+
+                        <div className="absolute inset-0 bg-blue-50/40 rounded-[1.5rem] border-4 border-gray-300 overflow-hidden shadow-inner backdrop-blur-[1px]">
+
+                            {randomPositions.map((pos, i) => (
+
+                                <div key={i} className="absolute flex items-center justify-center transition-transform" 
+
+                                     style={{ 
+
+                                         left: `${pos.left}%`, 
+
+                                         bottom: `${pos.bottom}%`, 
+
+                                         width: '30%',
+
+                                         height: '30%',
+
+                                         transform: `translate(-50%, 0) rotate(${pos.rotate}deg)`,
+
+                                         zIndex: pos.zIndex
+
+                                     }}>
+
+                                    {pos.item.image ? (
+
+                                        <img src={pos.item.image} className="w-full h-full object-cover shadow-sm" 
+
+                                             style={{
+
+                                                 borderRadius: pos.item.isPng ? '0' : '4px', 
+
+                                                 padding: pos.item.isPng ? '0' : '2px',
+
+                                                 backgroundColor: pos.item.isPng ? 'transparent' : 'white'
+
+                                             }}
+
+                                        />
+
+                                    ) : (
+
+                                        <div className="w-full h-full rounded-full shadow-md border border-black/10"
+
+                                             style={{ backgroundColor: pos.item.color || '#fbbf24' }}></div>
+
+                                    )}
+
+                                </div>
+
+                            ))}
+
+                            <div className="absolute top-2 right-2 w-1/2 h-full bg-gradient-to-l from-white/30 to-transparent pointer-events-none rounded-tr-2xl"></div>
+
+                            <div className="absolute top-3 left-3 w-10 h-3 bg-white/50 rounded-full blur-[1px] pointer-events-none -rotate-12"></div>
+
+                        </div>
+
+                    </div>
+
+                    <div className="w-[85%] h-14 -mt-3 rounded-b-2xl rounded-t-lg border-x-4 border-b-8 border-black/20 shadow-xl relative z-20 flex flex-col items-center justify-center transition-colors pointer-events-none"
+
+                         style={{ backgroundColor: color }}>
+
+                        <div className="w-12 h-6 bg-gray-200 rounded border-2 border-gray-400 shadow-inner flex items-center justify-center mt-1">
+
+                            <div className="w-8 h-2 bg-gray-800 rounded-full"></div>
+
+                        </div>
+
+                        <div className="absolute -right-2 top-3 w-6 h-6 bg-white rounded-full border-2 border-gray-300 shadow flex items-center justify-center">
+
+                            <div className="w-4 h-1 bg-gray-300 rotate-90"></div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            );
+
+        };
+
+        // --- APP PRINCIPAL ---
+
+        function GachaApp() {
+
+            const [machines, setMachines] = useState(() => {
+
+                try { return JSON.parse(localStorage.getItem('gacha_v9_machines')) || []; } catch { return []; }
+
+            });
+
+            const [notes, setNotes] = useState(() => {
+
+                try { return JSON.parse(localStorage.getItem('gacha_v9_notes')) || []; } catch { return []; }
+
+            });
+
+            const [results, setResults] = useState(() => {
+
+                try { return JSON.parse(localStorage.getItem('gacha_v9_results')) || {}; } catch { return {}; }
+
+            });
+
+            // Estados UI
+
+            const [view, setView] = useState('home');
+
+            const [activeId, setActiveId] = useState(null);
+
+            
+
+            // Estado para reordenar (Long Press)
+
+            const [isReordering, setIsReordering] = useState(false);
+
+            const longPressTimer = useRef(null);
+
+            // Estados Temporales (Creación Objeto)
+
+            const [newItemName, setNewItemName] = useState("");
+
+            const [newItemImage, setNewItemImage] = useState(null);
+
+            const [newItemIsPng, setNewItemIsPng] = useState(false);
+
+            const [newItemColor, setNewItemColor] = useState("#fbbf24");
+
+            const [importText, setImportText] = useState(""); // Texto para importar
+
+            // Estados Nota/Juego
+
+            const [selectedIds, setSelectedIds] = useState([]);
+
+            const [noteConfigs, setNoteConfigs] = useState({});
+
+            const [drawAmount, setDrawAmount] = useState(1);
+
+            const [mergeDuplicates, setMergeDuplicates] = useState(false);
+
+            
+
+            // Estados Animación
+
+            const [animQueue, setAnimQueue] = useState([]);
+
+            const [currentAnimItem, setCurrentAnimItem] = useState(null);
+
+            const [animStep, setAnimStep] = useState(0); 
+
+            
+
+            // Persistencia
+
+            useEffect(() => { try { localStorage.setItem('gacha_v9_machines', JSON.stringify(machines)); } catch {} }, [machines]);
+
+            useEffect(() => { try { localStorage.setItem('gacha_v9_notes', JSON.stringify(notes)); } catch {} }, [notes]);
+
+            useEffect(() => { try { localStorage.setItem('gacha_v9_results', JSON.stringify(results)); } catch {} }, [results]);
+
+            // --- FUNCIONES ---
+
+            const addMachine = () => {
+
+                if (isReordering) return;
+
+                setMachines([...machines, { 
+
+                    id: generateId(), 
+
+                    name: `Máquina ${machines.length+1}`, 
+
+                    color: '#ef4444', 
+
+                    items: [], 
+
+                    createdAt: Date.now() 
+
+                }]);
+
+            };
+
+            const duplicateMachine = (id) => {
+
+                const original = machines.find(m => m.id === id);
+
+                if (!original) return;
+
+                const copy = { 
+
+                    ...original, 
+
+                    id: generateId(), 
+
+                    name: original.name + " (Copia)",
+
+                    createdAt: Date.now(),
+
+                    items: original.items.map(i => ({ ...i, id: generateId() })) 
+
+                };
+
+                setMachines([...machines, copy]);
+
+                setView('home');
+
+            };
+
+            const deleteMachine = (id) => {
+
+                if(confirm("¿Eliminar máquina?")) {
+
+                    setMachines(machines.filter(m => m.id !== id));
+
+                    const newRes = { ...results }; delete newRes[id]; setResults(newRes);
+
+                    setView('home');
+
+                }
+
+            };
+
+            const moveMachine = (index, direction) => {
+
+                const newArr = [...machines];
+
+                if (direction === 'left' && index > 0) {
+
+                    [newArr[index], newArr[index-1]] = [newArr[index-1], newArr[index]];
+
+                } else if (direction === 'right' && index < newArr.length - 1) {
+
+                    [newArr[index], newArr[index+1]] = [newArr[index+1], newArr[index]];
+
+                }
+
+                setMachines(newArr);
+
+            };
+
+            // Lógica de "Dejarle Picado" (Long Press)
+
+            const handleTouchStart = () => {
+
+                longPressTimer.current = setTimeout(() => {
+
+                    setIsReordering(true);
+
+                }, 800); // 800ms para activar
+
+            };
+
+            const handleTouchEnd = () => {
+
+                if (longPressTimer.current) {
+
+                    clearTimeout(longPressTimer.current);
+
+                }
+
+            };
+
+            const handleImage = async (e) => {
+
+                if (e.target.files && e.target.files[0]) {
+
+                    const resized = await resizeImage(e.target.files[0]);
+
+                    setNewItemImage(resized);
+
+                    e.target.value = '';
+
+                }
+
+            };
+
+            const addItem = () => {
+
+                if (!newItemName) return;
+
+                const m = machines.find(m => m.id === activeId);
+
+                const item = { 
+
+                    id: generateId(), 
+
+                    name: newItemName, 
+
+                    image: newItemImage, 
+
+                    isPng: newItemIsPng,
+
+                    color: newItemColor
+
+                };
+
+                updateMachine(activeId, { items: [...m.items, item] });
+
+                setNewItemName(""); 
+
+            };
+
+            const updateMachine = (id, data) => setMachines(machines.map(m => m.id === id ? { ...m, ...data } : m));
+
+            // -- SISTEMA DE BACKUP --
+
+            const handleExport = () => {
+
+                const dataToExport = {
+
+                    version: 'v10',
+
+                    timestamp: Date.now(),
+
+                    machines,
+
+                    notes,
+
+                    results
+
+                };
+
+                const stringData = JSON.stringify(dataToExport);
+
+                navigator.clipboard.writeText(stringData).then(() => {
+
+                    alert("¡CÓDIGO COPIADO!\n\nSe ha copiado todo tu progreso al portapapeles. Guarda este texto en tus notas o envíatelo para no perderlo.");
+
+                }).catch(err => {
+
+                    alert("Error al copiar. Intenta de nuevo.");
+
+                });
+
+            };
+
+            const handleImport = () => {
+
+                try {
+
+                    if(!importText) return alert("Pega el código primero");
+
+                    const data = JSON.parse(importText);
+
+                    
+
+                    if (!data.machines) throw new Error("Formato inválido");
+
+                    
+
+                    if(confirm("ADVERTENCIA: Esto borrará lo que tienes actualmente y pondrá lo del código. ¿Continuar?")) {
+
+                        setMachines(data.machines || []);
+
+                        setNotes(data.notes || []);
+
+                        setResults(data.results || {});
+
+                        setImportText("");
+
+                        alert("¡Datos cargados con éxito!");
+
+                        setView('home');
+
+                    }
+
+                } catch (e) {
+
+                    alert("El código no es válido o está incompleto.");
+
+                }
+
+            };
+
+            // -- JUEGO Y ANIMACIÓN --
+
+            const startPlay = (targetId, isNote = false) => {
+
+                let queue = [];
+
+                if (!isNote) {
+
+                    const m = machines.find(m => m.id === targetId);
+
+                    if (!m || m.items.length === 0) return;
+
+                    for (let i=0; i<drawAmount; i++) {
+
+                        queue.push({ 
+
+                            ...m.items[Math.floor(Math.random() * m.items.length)], 
+
+                            uid: generateId(), 
+
+                            sourceId: m.id 
+
+                        });
+
+                    }
+
+                } else {
+
+                    const n = notes.find(n => n.id === targetId);
+
+                    n.machineIds.forEach(mid => {
+
+                        const m = machines.find(mac => mac.id === mid);
+
+                        const count = noteConfigs[mid] || 1;
+
+                        if (m && m.items.length > 0) {
+
+                            for(let i=0; i<count; i++) queue.push({ 
+
+                                ...m.items[Math.floor(Math.random() * m.items.length)], 
+
+                                uid: generateId(), 
+
+                                sourceId: mid 
+
+                            });
+
+                        }
+
+                    });
+
+                }
+
+                if (queue.length === 0) return;
+
+                setAnimQueue(queue);
+
+                setAnimStep(0);
+
+                setActiveId(targetId);
+
+                setView('animation');
+
+            };
+
+            useEffect(() => {
+
+                if (view !== 'animation' || animQueue.length === 0) return;
+
+                
+
+                setCurrentAnimItem(animQueue[0]);
+
+                setAnimStep(0); 
+
+                const t1 = setTimeout(() => setAnimStep(1), 600); // Drop
+
+                const t2 = setTimeout(() => setAnimStep(2), 1100); // Open
+
+                const t3 = setTimeout(() => {
+
+                    const item = animQueue[0];
+
+                    setResults(prev => {
+
+                        const existing = prev[activeId] || [];
+
+                        return { ...prev, [activeId]: [...existing, item] };
+
+                    });
+
+                    
+
+                    const nextQueue = animQueue.slice(1);
+
+                    if (nextQueue.length > 0) {
+
+                        setAnimQueue(nextQueue);
+
+                        setAnimStep(0); 
+
+                    } else {
+
+                        const isNote = !!notes.find(n => n.id === activeId);
+
+                        setView(isNote ? 'results_note' : 'results');
+
+                    }
+
+                }, 2500);
+
+                return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+
+            }, [view, animQueue, activeId]); 
+
+            const skipAllAnimation = () => {
+
+                if (animQueue.length > 0) {
+
+                    setResults(prev => {
+
+                        const existing = prev[activeId] || [];
+
+                        return { ...prev, [activeId]: [...existing, ...animQueue] };
+
+                    });
+
+                    setAnimQueue([]);
+
+                }
+
+                const isNote = !!notes.find(n => n.id === activeId);
+
+                setView(isNote ? 'results_note' : 'results');
+
+            };
+
+            const skipCurrentMachine = () => {
+
+                const currentSourceId = animQueue[0]?.sourceId;
+
+                if (!currentSourceId) return;
+
+                const itemsToRecord = [];
+
+                const itemsToKeep = [];
+
+                animQueue.forEach(item => {
+
+                    if (item.sourceId === currentSourceId) {
+
+                        itemsToRecord.push(item);
+
+                    } else {
+
+                        itemsToKeep.push(item);
+
+                    }
+
+                });
+
+                setResults(prev => {
+
+                    const existing = prev[activeId] || [];
+
+                    return { ...prev, [activeId]: [...existing, ...itemsToRecord] };
+
+                });
+
+                setAnimQueue(itemsToKeep);
+
+                if (itemsToKeep.length === 0) {
+
+                    const isNote = !!notes.find(n => n.id === activeId);
+
+                    setView(isNote ? 'results_note' : 'results');
+
+                }
+
+            };
+
+            const processResults = (items) => {
+
+                if (!mergeDuplicates) return items;
+
+                const groups = {};
+
+                items.forEach(it => {
+
+                    const regex = /\s[xX](\d+)$/;
+
+                    const match = it.name.match(regex);
+
+                    let base = it.name;
+
+                    let qty = 1;
+
+                    if(match) { qty = parseInt(match[1]); base = it.name.replace(regex, '').trim(); }
+
+                    
+
+                    if(!groups[base]) groups[base] = { ...it, name: base, totalQuantity: 0 };
+
+                    groups[base].totalQuantity += qty;
+
+                });
+
+                return Object.values(groups);
+
+            };
+
+            // --- VISTAS ---
+
+            // 1. HOME
+
+            if (view === 'home') {
+
+                return (
+
+                    <div className="min-h-screen pb-32 pt-8 px-4 prevent-select" onMouseUp={handleTouchEnd} onTouchEnd={handleTouchEnd}>
+
+                        
+
+                        {/* Botón de Ajustes (BACKUP) */}
+
+                        {!isReordering && (
+
+                            <div className="absolute top-4 right-4 z-40">
+
+                                <button onClick={() => setView('settings')} className="bg-white p-2 rounded-full shadow-md text-gray-600 border border-gray-100">
+
+                                    <Icons.Settings />
+
+                                </button>
+
+                            </div>
+
+                        )}
+
+                        {/* Mensaje Informativo si no hay máquinas */}
+
+                        {machines.length === 0 && !isReordering && (
+
+                             <div className="text-center text-gray-400 mt-10">
+
+                                <p>Crea tu primera máquina abajo.</p>
+
+                             </div>
+
+                        )}
+
+                        {/* Mensaje de Modo Edición */}
+
+                        {isReordering && (
+
+                            <div className="fixed top-0 left-0 w-full bg-yellow-400 text-yellow-900 text-center py-2 font-bold z-50 text-xs shadow-md">
+
+                                MODO ORGANIZAR ACTIVO
+
+                            </div>
+
+                        )}
+
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-10 mt-4">
+
+                            {machines.map((m, idx) => (
+
+                                <div key={m.id} 
+
+                                     className={`flex flex-col items-center relative group ${isReordering ? 'animate-shake' : 'animate-pop'}`}
+
+                                     onMouseDown={handleTouchStart} 
+
+                                     onTouchStart={handleTouchStart}
+
+                                     onClick={() => {
+
+                                         if (!isReordering) {
+
+                                             setActiveId(m.id); 
+
+                                             setView('modal');
+
+                                         }
+
+                                     }}
+
+                                >
+
+                                    <GumballMachine items={m.items} color={m.color} size="sm" className="pointer-events-none" />
+
+                                    
+
+                                    {isReordering && (
+
+                                        <div className="absolute inset-0 z-40 flex items-center justify-between px-1">
+
+                                            {idx > 0 ? (
+
+                                                <button onClick={(e) => { e.stopPropagation(); moveMachine(idx, 'left'); }} className="bg-white text-black p-2 rounded-full shadow-lg border border-gray-200 active:scale-90">
+
+                                                    <Icons.Up size={16} className="-rotate-90"/>
+
+                                                </button>
+
+                                            ) : <div/>}
+
+                                            
+
+                                            {idx < machines.length - 1 ? (
+
+                                                <button onClick={(e) => { e.stopPropagation(); moveMachine(idx, 'right'); }} className="bg-white text-black p-2 rounded-full shadow-lg border border-gray-200 active:scale-90">
+
+                                                    <Icons.Down size={16} className="-rotate-90"/>
+
+                                                </button>
+
+                                            ) : <div/>}
+
+                                        </div>
+
+                                    )}
+
+                                    <div className="mt-3 relative w-full flex justify-center">
+
+                                        <input value={m.name} onChange={e => updateMachine(m.id, { name: e.target.value })} 
+
+                                            disabled={isReordering}
+
+                                            className="text-center bg-transparent font-bold text-gray-700 text-sm w-full outline-none border-b border-transparent focus:border-gray-300" />
+
+                                        {!isReordering && <Icons.Pencil className="text-gray-400 absolute right-0 pointer-events-none w-3 h-3"/>}
+
+                                    </div>
+
+                                    {results[m.id] && !isReordering && <span className="bg-green-100 text-green-600 text-[10px] px-2 rounded-full font-bold mt-1">Resultados</span>}
+
+                                </div>
+
+                            ))}
+
+                            
+
+                            {!isReordering && (
+
+                                <button onClick={addMachine} className="aspect-[4/5] rounded-3xl border-4 border-dashed border-gray-300 flex flex-col items-center justify-center text-gray-400 active:bg-gray-200">
+
+                                    <Icons.Plus size={32} />
+
+                                    <span className="text-xs font-bold mt-1">NUEVA</span>
+
+                                </button>
+
+                            )}
+
+                        </div>
+
+                        
+
+                        {/* Lista Notas */}
+
+                        {notes.length > 0 && !isReordering && (
+
+                            <div className="mt-10 relative z-40">
+
+                                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Notas</h3>
+
+                                <div className="space-y-3">
+
+                                    {notes.map(n => {
+
+                                        const validCount = n.machineIds.filter(mid => machines.some(m => m.id === mid)).length;
+
+                                        return (
+
+                                            <div key={n.id} onClick={() => { setActiveId(n.id); setView('view_note'); }} 
+
+                                                className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between active:scale-95 transition-transform">
+
+                                                <div className="flex items-center gap-3">
+
+                                                    <div className="w-10 h-10 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center"><Icons.Notes size={20}/></div>
+
+                                                    <div>
+
+                                                        <div className="font-bold text-gray-800">{n.name}</div>
+
+                                                        <div className="text-xs text-gray-400">{validCount} Máquinas</div>
+
+                                                    </div>
+
+                                                </div>
+
+                                                {results[n.id] ? <span className="text-green-500 font-bold text-xs">Ver Resultados</span> : <Icons.Back className="rotate-180 text-gray-300"/>}
+
+                                            </div>
+
+                                        );
+
+                                    })}
+
+                                </div>
+
+                            </div>
+
+                        )}
+
+                        
+
+                        {/* Botón flotante */}
+
+                        <div className="fixed bottom-6 left-0 w-full flex justify-center z-50 px-4">
+
+                            {isReordering ? (
+
+                                <button onClick={() => setIsReordering(false)} className="w-full max-w-xs bg-green-500 text-white px-6 py-4 rounded-xl font-bold shadow-xl active:scale-95 transition-transform uppercase tracking-widest border-2 border-green-600">
+
+                                    TERMINAR
+
+                                </button>
+
+                            ) : (
+
+                                <button onClick={() => setView('create_note')} className="bg-gray-900 text-white px-6 py-3 rounded-full font-bold shadow-xl flex items-center gap-2 active:scale-90 transition-transform">
+
+                                    <Icons.Notes /> CREAR NOTA
+
+                                </button>
+
+                            )}
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            // NUEVA VISTA: SETTINGS (BACKUP)
+
+            if (view === 'settings') {
+
+                return (
+
+                    <div className="min-h-screen bg-white flex flex-col items-center p-4">
+
+                        <div className="w-full flex items-center mb-6">
+
+                            <button onClick={() => setView('home')} className="bg-gray-100 p-2 rounded-full"><Icons.Back /></button>
+
+                            <h2 className="ml-4 font-bold text-xl">Datos y Backup</h2>
+
+                        </div>
+
+                        <div className="w-full max-w-md space-y-6">
+
+                            {/* EXPORTAR */}
+
+                            <div className="bg-blue-50 p-6 rounded-2xl border-2 border-blue-100 text-center">
+
+                                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+
+                                    <Icons.Download size={32} />
+
+                                </div>
+
+                                <h3 className="font-bold text-lg text-blue-900 mb-2">Guardar Datos</h3>
+
+                                <p className="text-sm text-blue-700 mb-4 leading-tight">
+
+                                    Genera un código con TODAS tus máquinas, fotos y resultados para guardarlo o pasarlo a otro dispositivo.
+
+                                </p>
+
+                                <button onClick={handleExport} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg active:scale-95">
+
+                                    COPIAR CÓDIGO
+
+                                </button>
+
+                            </div>
+
+                            {/* IMPORTAR */}
+
+                            <div className="bg-gray-50 p-6 rounded-2xl border-2 border-gray-100 text-center">
+
+                                <div className="w-16 h-16 bg-gray-200 text-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
+
+                                    <Icons.Upload size={32} />
+
+                                </div>
+
+                                <h3 className="font-bold text-lg text-gray-800 mb-2">Cargar Datos</h3>
+
+                                <p className="text-sm text-gray-500 mb-4 leading-tight">
+
+                                    Pega aquí el código que copiaste anteriormente para restaurar tus máquinas.
+
+                                </p>
+
+                                <textarea 
+
+                                    value={importText}
+
+                                    onChange={(e) => setImportText(e.target.value)}
+
+                                    placeholder="Pega el código largo aquí..."
+
+                                    className="w-full h-32 p-3 bg-white border border-gray-300 rounded-xl text-xs mb-4 outline-none focus:border-blue-500"
+
+                                ></textarea>
+
+                                <button onClick={handleImport} className="w-full py-3 bg-gray-800 text-white rounded-xl font-bold shadow-lg active:scale-95 disabled:opacity-50" disabled={!importText}>
+
+                                    RESTAURAR DATOS
+
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            // ... (Resto de vistas animation, modal, edit, play, results igual que antes) ...
+
+            if (view === 'animation') {
+
+                const isNote = !!notes.find(n => n.id === activeId);
+
+                const currentSourceId = animQueue[0]?.sourceId;
+
+                const currentMachine = machines.find(m => m.id === currentSourceId);
+
+                const currentMachineName = currentMachine?.name || "Máquina Desconocida";
+
+                return (
+
+                    <div className="fixed inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center overflow-hidden">
+
+                        {isNote && (
+
+                            <button onClick={skipCurrentMachine} className="absolute top-4 left-4 text-yellow-400 text-[10px] font-bold border border-yellow-400/50 px-3 py-2 rounded-full hover:bg-white/10 z-50">
+
+                                SALTAR MÁQUINA
+
+                            </button>
+
+                        )}
+
+                        <button onClick={skipAllAnimation} className="absolute top-4 right-4 text-white text-[10px] font-bold border border-white/20 px-3 py-2 rounded-full hover:bg-white/10 z-50">
+
+                            SALTAR TODO
+
+                        </button>
+
+                        <div className="absolute top-20 left-0 w-full text-center px-4 z-40">
+
+                            <p className="text-gray-400 text-sm font-bold">Simulando:</p>
+
+                            <h3 className="text-white text-xl font-black w-full truncate">{currentMachineName}</h3>
+
+                        </div>
+
+                        <div className="relative w-full max-w-sm h-64 flex items-center justify-center mt-32">
+
+                            {animStep === 0 && (
+
+                                <div className="text-center animate-shake">
+
+                                    <div className="w-32 h-32 bg-red-500 rounded-full mx-auto border-4 border-white/20 shadow-xl flex items-center justify-center mb-4 text-white">
+
+                                        <Icons.Play size={48} className="translate-x-1"/>
+
+                                    </div>
+
+                                    <p className="text-white font-bold tracking-widest text-xl">GIRANDO...</p>
+
+                                </div>
+
+                            )}
+
+                            {animStep === 1 && (
+
+                                <div className="animate-drop">
+
+                                    <div className="w-24 h-24 bg-blue-500 rounded-full border-4 border-white shadow-2xl mx-auto"></div>
+
+                                </div>
+
+                            )}
+
+                            {animStep === 2 && currentAnimItem && (
+
+                                <div className="animate-pop bg-white p-6 rounded-3xl shadow-2xl flex flex-col items-center max-w-[80%] border-4 border-gray-200">
+
+                                    <div className="w-40 h-40 mb-4 flex items-center justify-center bg-gray-50 rounded-xl overflow-hidden">
+
+                                        {currentAnimItem.image ? (
+
+                                            <img src={currentAnimItem.image} className="w-full h-full object-contain" />
+
+                                        ) : (
+
+                                            <div className="w-24 h-24 rounded-full" style={{backgroundColor: currentAnimItem.color || 'gold'}}></div>
+
+                                        )}
+
+                                    </div>
+
+                                    <h2 className="text-xl font-black text-gray-800 text-center leading-tight">{currentAnimItem.name}</h2>
+
+                                    <p className="text-gray-400 text-xs font-bold mt-2 uppercase">Faltan {animQueue.length - 1}</p>
+
+                                </div>
+
+                            )}
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            if (view === 'modal') {
+
+                const m = machines.find(x => x.id === activeId);
+
+                if (!m) return <div onClick={() => setView('home')} className="fixed inset-0 bg-black/60 z-50"></div>; 
+
+                const hasRes = !!results[m.id];
+
+                return (
+
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setView('home')}>
+
+                        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl animate-pop" onClick={e => e.stopPropagation()}>
+
+                            <div className="flex justify-between items-center mb-6">
+
+                                <h2 className="text-xl font-bold truncate pr-2">{m.name}</h2>
+
+                                <button onClick={() => setView('home')}><Icons.Close /></button>
+
+                            </div>
+
+                            <div className="space-y-3">
+
+                                <button onClick={() => setView(hasRes ? 'results' : 'play')} 
+
+                                    className={`w-full py-4 rounded-xl font-black text-white shadow-lg flex items-center justify-center gap-2 ${hasRes ? 'bg-green-500' : 'bg-blue-600'}`}>
+
+                                    {hasRes ? 'VER RESULTADOS' : 'JUGAR'} <Icons.Play />
+
+                                </button>
+
+                                <div className="flex gap-2">
+
+                                    <button onClick={() => setView('edit')} className="flex-1 py-4 bg-gray-100 rounded-xl font-bold text-gray-700 flex items-center justify-center gap-2 hover:bg-gray-200">
+
+                                        <Icons.Pencil /> EDITAR
+
+                                    </button>
+
+                                    <button onClick={() => duplicateMachine(m.id)} className="flex-1 py-4 bg-gray-100 rounded-xl font-bold text-gray-700 flex items-center justify-center gap-2 hover:bg-gray-200">
+
+                                        <Icons.Copy /> DUPLICAR
+
+                                    </button>
+
+                                </div>
+
+                                <button onClick={() => deleteMachine(m.id)} className="w-full py-3 mt-2 text-red-400 text-sm font-bold flex items-center justify-center gap-2">
+
+                                    <Icons.Trash size={18} /> Eliminar
+
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            if (view === 'edit') {
+
+                const m = machines.find(x => x.id === activeId);
+
+                if (!m) return null;
+
+                return (
+
+                    <div className="min-h-screen bg-white flex flex-col z-50">
+
+                        <div className="p-4 border-b flex items-center sticky top-0 bg-white z-20 shadow-sm">
+
+                            <button onClick={() => setView('modal')} className="mr-4"><Icons.Back /></button>
+
+                            <h2 className="font-bold text-lg">Editar</h2>
+
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-4 pb-52">
+
+                            <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between">
+
+                                <span className="font-bold text-gray-700">Color Máquina</span>
+
+                                <div className="color-wrapper w-12 h-12 rounded-full shadow border-2 border-white ring-1 ring-gray-200" style={{backgroundColor: m.color}}>
+
+                                    <input type="color" value={m.color} onChange={e => updateMachine(m.id, {color: e.target.value})}/>
+
+                                </div>
+
+                            </div>
+
+                            <p className="text-xs font-bold text-gray-400 uppercase mb-2">Objetos ({m.items.length})</p>
+
+                            <div className="space-y-2">
+
+                                {m.items.map((item, i) => (
+
+                                    <div key={i} className="flex items-center gap-3 p-2 bg-gray-50 rounded-xl border border-gray-100">
+
+                                        <div className="w-12 h-12 bg-white rounded-lg border shrink-0 overflow-hidden flex items-center justify-center">
+
+                                            {item.image ? <img src={item.image} className="w-full h-full object-cover"/> : <div className="w-full h-full" style={{backgroundColor: item.color}}></div>}
+
+                                        </div>
+
+                                        <div className="flex-1 font-medium text-sm truncate">{item.name}</div>
+
+                                        <button onClick={() => updateMachine(m.id, { items: m.items.filter((_, idx) => idx !== i) })} className="p-2 text-red-400"><Icons.Trash size={18}/></button>
+
+                                    </div>
+
+                                ))}
+
+                            </div>
+
+                        </div>
+
+                        <div className="fixed bottom-0 w-full bg-white border-t p-3 shadow-lg z-50">
+
+                            <div className="flex gap-2 mb-2">
+
+                                <div className="relative flex-1">
+
+                                    <input type="file" accept="image/*" onChange={handleImage} className="absolute inset-0 w-full h-full opacity-0 z-20" />
+
+                                    <div className={`w-full h-10 rounded-lg border-2 border-dashed flex items-center justify-center gap-2 ${newItemImage ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-300 text-gray-500'}`}>
+
+                                        <Icons.Image size={16}/> <span className="text-[10px] font-bold uppercase">{newItemImage ? 'Cambiar Foto' : 'ABRIR GALERÍA'}</span>
+
+                                    </div>
+
+                                </div>
+
+                                {newItemImage && (
+
+                                    <button onClick={() => setNewItemIsPng(!newItemIsPng)} className={`px-3 rounded-lg border-2 font-bold text-[10px] ${newItemIsPng ? 'bg-blue-50 border-blue-500 text-blue-600' : 'border-gray-200 text-gray-400'}`}>
+
+                                        PNG?
+
+                                    </button>
+
+                                )}
+
+                                {!newItemImage && (
+
+                                    <div className="color-wrapper w-10 h-10 rounded-lg border-2 border-gray-300" style={{backgroundColor: newItemColor}}>
+
+                                        <input type="color" value={newItemColor} onChange={e => setNewItemColor(e.target.value)}/>
+
+                                    </div>
+
+                                )}
+
+                            </div>
+
+                            <div className="flex gap-2 items-center">
+
+                                {newItemImage && <div className="w-10 h-10 rounded border overflow-hidden"><img src={newItemImage} className="w-full h-full object-cover"/></div>}
+
+                                <input value={newItemName} onChange={e => setNewItemName(e.target.value)} placeholder="Nombre del objeto" className="flex-1 bg-gray-100 p-3 rounded-xl text-sm font-bold outline-none" />
+
+                                <button onClick={addItem} disabled={!newItemName} className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow active:scale-90 ${newItemName ? 'bg-black' : 'bg-gray-300'}`}>
+
+                                    <Icons.Plus />
+
+                                </button>
+
+                            </div>
+
+                            {newItemImage && <button onClick={() => setNewItemImage(null)} className="text-[10px] text-red-500 font-bold mt-1 w-full text-left pl-1">Quitar foto</button>}
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            if (view === 'play') {
+
+                const m = machines.find(x => x.id === activeId);
+
+                if (!m) return null;
+
+                return (
+
+                    <div className="min-h-screen bg-gray-50 flex flex-col items-center">
+
+                        <div className="w-full p-4 absolute top-0 z-20"><button onClick={() => setView('modal')} className="bg-white p-2 rounded-full shadow"><Icons.Back /></button></div>
+
+                        <div className="flex-1 flex items-center justify-center w-full"><GumballMachine items={m.items} color={m.color} size="lg" /></div>
+
+                        <div className="w-full bg-white rounded-t-[2rem] p-6 shadow-xl z-30 pb-10">
+
+                             <div className="flex gap-4 items-center">
+
+                                <input type="number" value={drawAmount} onChange={e => setDrawAmount(Math.max(1, parseInt(e.target.value)||1))} className="w-20 bg-gray-100 p-4 rounded-2xl text-2xl font-black text-center outline-none" />
+
+                                <button onClick={() => startPlay(m.id)} disabled={m.items.length===0} className={`flex-1 h-[70px] rounded-2xl flex items-center justify-center gap-2 text-white font-black text-xl shadow-xl active:scale-95 ${m.items.length===0 ? 'bg-gray-300' : 'bg-black'}`}>
+
+                                    JUGAR <Icons.Play />
+
+                                </button>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            if (view === 'results' || view === 'results_note') {
+
+                const isNote = view === 'results_note';
+
+                const res = results[activeId] || [];
+
+                let machineResults = {}; 
+
+                if (isNote) {
+
+                    const note = notes.find(n => n.id === activeId);
+
+                    if (!note) return null;
+
+                    note.machineIds.forEach(mid => {
+
+                        const machine = machines.find(m => m.id === mid);
+
+                        const machineItems = res.filter(item => item.sourceId === mid);
+
+                        if (machineItems.length > 0 && machine) {
+
+                            machineResults[mid] = processResults(machineItems); 
+
+                        }
+
+                    });
+
+                } else {
+
+                    machineResults[activeId] = processResults(res);
+
+                }
+
+                
+
+                const machineIdsToShow = isNote ? Object.keys(machineResults) : [activeId];
+
+                return (
+
+                    <div className="min-h-screen bg-gray-100 flex flex-col">
+
+                        <div className="bg-white p-4 shadow-sm flex justify-between items-center sticky top-0 z-20">
+
+                            <h2 className="font-black text-lg">{isNote ? 'Resultados de Nota' : `Resultados (${res.length})`}</h2>
+
+                            <button onClick={() => setView(isNote ? 'view_note' : 'play')} className="bg-gray-100 p-2 rounded-full"><Icons.Close /></button>
+
+                        </div>
+
+                        
+
+                        <div className="p-4 overflow-y-auto pb-32 space-y-8">
+
+                            {machineIdsToShow.map(mid => {
+
+                                const machine = machines.find(m => m.id === mid);
+
+                                const list = machineResults[mid] || [];
+
+                                return (
+
+                                    <div key={mid}>
+
+                                        {isNote && <h3 className="font-black text-md mb-3 text-gray-700 border-l-4 border-red-500 pl-2">{machine?.name || 'Máquina Eliminada'} ({list.reduce((sum, item) => sum + (item.totalQuantity || 1), 0)})</h3>}
+
+                                        <div className={`grid gap-3 ${isNote ? 'grid-cols-3' : 'grid-cols-4'}`}>
+
+                                            {list.map((item, i) => (
+
+                                                <div key={item.uid || item.id + i} className="bg-white rounded-xl p-2 shadow-sm border border-gray-100 flex flex-col animate-pop" style={{animationDelay: `${i*0.05}s`}}>
+
+                                                    <div className="aspect-square bg-gray-50 rounded-lg mb-2 overflow-hidden relative flex items-center justify-center p-2">
+
+                                                        {item.image ? (
+
+                                                            <img src={item.image} className="w-full h-full object-contain" />
+
+                                                        ) : (
+
+                                                            <div className="w-full h-full rounded-full" style={{backgroundColor: item.color || 'gold'}}></div>
+
+                                                        )}
+
+                                                        {mergeDuplicates && item.totalQuantity > 1 && <div className="absolute bottom-1 right-1 bg-black text-white text-[10px] font-bold px-1.5 rounded-full">x{item.totalQuantity}</div>}
+
+                                                    </div>
+
+                                                    <p className="font-bold text-xs text-center leading-tight line-clamp-2">{item.name}</p>
+
+                                                </div>
+
+                                            ))}
+
+                                        </div>
+
+                                    </div>
+
+                                );
+
+                            })}
+
+                        </div>
+
+                        <div className="fixed bottom-0 w-full bg-white border-t p-4 flex gap-3 shadow-lg">
+
+                            <button onClick={() => setMergeDuplicates(!mergeDuplicates)} className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 ${mergeDuplicates ? 'bg-blue-50 border-blue-500 text-blue-600' : 'border-gray-200 text-gray-600'}`}>
+
+                                {mergeDuplicates ? 'VER TODO' : 'AGRUPAR'}
+
+                            </button>
+
+                            <button onClick={() => { 
+
+                                const n = { ...results }; delete n[activeId]; setResults(n); 
+
+                                setView(isNote ? 'view_note' : 'play'); 
+
+                            }} className="flex-1 py-3 bg-red-100 text-red-500 rounded-xl font-bold text-sm">LIMPIAR</button>
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            if (view === 'create_note') {
+
+                return (
+
+                    <div className="min-h-screen bg-white flex flex-col">
+
+                        <div className="p-4 border-b flex items-center sticky top-0 bg-white z-20">
+
+                            <button onClick={() => setView('home')}><Icons.Back /></button>
+
+                            <h2 className="font-bold text-lg ml-4">Seleccionar Máquinas</h2>
+
+                        </div>
+
+                        <div className="flex-1 p-4 grid grid-cols-2 gap-4 pb-24 overflow-y-auto">
+
+                            {machines.map(m => {
+
+                                const sel = selectedIds.includes(m.id);
+
+                                return (
+
+                                    <div key={m.id} onClick={() => setSelectedIds(sel ? selectedIds.filter(id=>id!==m.id) : [...selectedIds, m.id])}
+
+                                         className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${sel ? 'border-blue-500 bg-blue-50' : 'border-gray-100 bg-white'}`}>
+
+                                        <GumballMachine items={m.items} color={m.color} size="sm" className="mx-auto scale-75 origin-top pointer-events-none" />
+
+                                        <p className="text-center font-bold text-xs mt-2 truncate">{m.name}</p>
+
+                                        {sel && <div className="absolute top-2 right-2 text-blue-500 bg-white rounded-full p-1 shadow"><Icons.Check size={16}/></div>}
+
+                                    </div>
+
+                                )
+
+                            })}
+
+                        </div>
+
+                        <div className="p-4 border-t sticky bottom-0 bg-white">
+
+                            <button onClick={() => { if(selectedIds.length>0) { setNotes([...notes, { id: generateId(), name: `Nota ${notes.length+1}`, machineIds: selectedIds }]); setSelectedIds([]); setView('home'); }}} disabled={selectedIds.length===0} className={`w-full py-4 rounded-xl font-bold text-white transition-colors ${selectedIds.length>0 ? 'bg-blue-600' : 'bg-gray-300'}`}>
+
+                                CREAR NOTA ({selectedIds.length})
+
+                            </button>
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            if (view === 'view_note') {
+
+                const note = notes.find(n => n.id === activeId);
+
+                if (!note) return null;
+
+                const hasRes = !!results[note.id];
+
+                return (
+
+                    <div className="min-h-screen bg-gray-50 flex flex-col">
+
+                        <div className="bg-white p-4 sticky top-0 z-20 shadow-sm">
+
+                            <div className="flex justify-between items-center mb-2">
+
+                                <button onClick={() => setView('home')}><Icons.Back /></button>
+
+                                <button onClick={() => { if(confirm("¿Eliminar?")) { setNotes(notes.filter(n=>n.id!==note.id)); setView('home'); }}} className="text-red-400"><Icons.Trash /></button>
+
+                            </div>
+
+                            <input value={note.name} onChange={e => { setNotes(notes.map(n=>n.id===note.id ? {...n, name: e.target.value} : n)); }} className="text-2xl font-black bg-transparent w-full outline-none" />
+
+                        </div>
+
+                        <div className="flex-1 p-4 space-y-3 overflow-y-auto pb-32">
+
+                            {note.machineIds.map(mid => {
+
+                                const m = machines.find(mac => mac.id === mid);
+
+                                if (!m) return null;
+
+                                return (
+
+                                    <div key={mid} className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3">
+
+                                        <div className="w-14 h-14 shrink-0 relative"><div className="absolute top-0 left-0 scale-[0.4] origin-top-left pointer-events-none"><GumballMachine items={m.items} color={m.color} size="sm" /></div></div>
+
+                                        <div className="flex-1 min-w-0"><h4 className="font-bold text-gray-800 text-sm truncate">{m.name}</h4><p className="text-xs text-gray-400">{m.items.length} objetos</p></div>
+
+                                        <div className="flex flex-col items-end"><span className="text-[10px] font-bold text-gray-400 uppercase">Sacar</span>
+
+                                            <input type="number" min="0" value={noteConfigs[mid]||1} onChange={e => setNoteConfigs({...noteConfigs, [mid]: parseInt(e.target.value)||0})} className="w-12 bg-gray-100 rounded-lg text-center font-bold py-1 outline-none focus:ring-2 focus:ring-blue-500" disabled={hasRes}/>
+
+                                        </div>
+
+                                    </div>
+
+                                )
+
+                            })}
+
+                        </div>
+
+                        <div className="p-4 fixed bottom-0 w-full bg-white border-t">
+
+                            {hasRes ? (
+
+                                <div className="flex gap-3"><button onClick={() => setView('results_note')} className="flex-1 py-4 bg-green-500 text-white font-bold rounded-xl shadow-lg">VER RESULTADOS</button><button onClick={() => { const n={...results}; delete n[note.id]; setResults(n); }} className="w-16 bg-red-100 text-red-500 rounded-xl flex items-center justify-center"><Icons.Trash /></button></div>
+
+                            ) : (
+
+                                <button onClick={() => startPlay(note.id, true)} className="w-full py-4 bg-black text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2">JUGAR NOTA <Icons.Play /></button>
+
+                            )}
+
+                        </div>
+
+                    </div>
+
+                );
+
+            }
+
+            return null;
+
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+
+        root.render(<ErrorBoundary><GachaApp /></ErrorBoundary>);
+
+    </script>
+
+</body>
+
+</html>
+
